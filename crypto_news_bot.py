@@ -52,8 +52,9 @@ def fetch_crypto_news():
     return articles
 
 
-def fetch_bitcoin_price():
-    url = "https://api.coingecko.com/api/v3/simple/price"
+def fetch_bitcoin_data():
+    # Get current price
+    price_url = "https://api.coingecko.com/api/v3/simple/price"
     params = {
         "ids": "bitcoin",
         "vs_currencies": "usd",
@@ -61,51 +62,60 @@ def fetch_bitcoin_price():
         "include_24hr_vol": "true",
         "include_market_cap": "true",
     }
-    response = requests.get(url, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()["bitcoin"]
-    return data
+    r = requests.get(price_url, params=params, timeout=10)
+    r.raise_for_status()
+    data = r.json()["bitcoin"]
 
-
-def fetch_bitcoin_chart():
-    # Get 24hr hourly price data for chart
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {
+    # Get 7 day price history for chart
+    chart_url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    chart_params = {
         "vs_currency": "usd",
-        "days": "1",
-        "interval": "hourly",
+        "days": "7",
     }
-    response = requests.get(url, params=params, timeout=10)
+    r2 = requests.get(chart_url, params=chart_params, timeout=10)
+    r2.raise_for_status()
+    prices = r2.json()["prices"]
+    price_values = [str(round(p[1])) for p in prices]
+
+    return data, price_values
+
+
+def build_chart_url(price_values):
+    # Use quickchart.io to generate a real chart image
+    labels = [""] * len(price_values)
+    chart_config = (
+        '{"type":"line","data":{"labels":' + str(labels).replace("'", '"') + ','
+        '"datasets":[{"label":"BTC Price (USD)",'
+        '"data":[' + ",".join(price_values) + '],'
+        '"borderColor":"#F7931A",'
+        '"backgroundColor":"rgba(247,147,26,0.1)",'
+        '"borderWidth":2,'
+        '"pointRadius":0,'
+        '"fill":true}]},'
+        '"options":{"plugins":{"legend":{"display":false}},'
+        '"scales":{"x":{"display":false},'
+        '"y":{"ticks":{"callback":"function(v){return \'$\'+v.toLocaleString()}"}}}}}'
+    )
+    chart_url = "https://quickchart.io/chart?c=" + requests.utils.quote(chart_config) + "&width=600&height=300&backgroundColor=white"
+    return chart_url
+
+
+def send_bitcoin_chart_to_telegram(message, chart_url):
+    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto"
+    payload = {
+        "chat_id": TELEGRAM_CHANNEL,
+        "photo": chart_url,
+        "caption": message,
+        "parse_mode": "Markdown",
+    }
+    response = requests.post(url, json=payload, timeout=30)
     response.raise_for_status()
-    prices = response.json()["prices"]
-    return [p[1] for p in prices]
-
-
-def build_ascii_chart(prices):
-    if not prices:
-        return ""
-    min_price = min(prices)
-    max_price = max(prices)
-    height = 6
-    width = min(len(prices), 24)
-    prices = prices[-width:]
-    chart_lines = []
-    for row in range(height, 0, -1):
-        line = ""
-        threshold = min_price + (max_price - min_price) * (row / height)
-        for price in prices:
-            if price >= threshold:
-                line += "█"
-            else:
-                line += " "
-        chart_lines.append(line)
-    return "\n".join(chart_lines)
+    return response.json()
 
 
 def build_bitcoin_update():
-    data = fetch_bitcoin_price()
-    prices = fetch_bitcoin_chart()
-    chart = build_ascii_chart(prices)
+    data, price_values = fetch_bitcoin_data()
+    chart_url = build_chart_url(price_values)
 
     price = data["usd"]
     change = data["usd_24h_change"]
@@ -115,14 +125,14 @@ def build_bitcoin_update():
     trend = "📈" if change >= 0 else "📉"
 
     message = (
-        "₿ Bitcoin Price Update " + trend + "\n\n"
-        + "```\n" + chart + "\n```\n\n"
-        + arrow + " Price: $" + "{:,.2f}".format(price) + "\n"
-        + "24h Change: " + "{:+.2f}".format(change) + "%\n"
-        + "Volume: $" + "{:,.0f}".format(volume) + "\n"
-        + "Market Cap: $" + "{:,.0f}".format(market_cap)
+        "₿ *Bitcoin Price Update* " + trend + "\n\n"
+        + arrow + " *Price:* $" + "{:,.2f}".format(price) + "\n"
+        + "📊 *24h Change:* " + "{:+.2f}".format(change) + "%\n"
+        + "💰 *Volume:* $" + "{:,.0f}".format(volume) + "\n"
+        + "🏦 *Market Cap:* $" + "{:,.0f}".format(market_cap) + "\n\n"
+        + "_7 day price chart_"
     )
-    return message
+    return message, chart_url
 
 
 def rewrite_with_groq(title, description, source, url):
@@ -179,12 +189,12 @@ def run():
 
     while True:
         try:
-            # Post Bitcoin price + chart every 12 hours
+            # Post Bitcoin price chart every 12 hours
             if time.time() - last_btc_post > 43200:
                 try:
-                    btc_update = build_bitcoin_update()
-                    post_to_telegram(btc_update)
-                    print("  Posted Bitcoin price update with chart!")
+                    message, chart_url = build_bitcoin_update()
+                    send_bitcoin_chart_to_telegram(message, chart_url)
+                    print("  Posted Bitcoin price chart!")
                     last_btc_post = time.time()
                 except Exception as e:
                     print("  Bitcoin price error: " + str(e))
