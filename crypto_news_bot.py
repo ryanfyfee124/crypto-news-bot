@@ -6,10 +6,10 @@ import requests
 # ============================================================
 # CONFIGURATION — add your keys here or use env variables
 # ============================================================
-NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "cf31c1b5840740eda902f42b0ab0927c")
+NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "")
-ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
 
 CHECK_INTERVAL_MINUTES = 15   # how often to check for new news
 MAX_ARTICLES_PER_RUN   = 3    # max posts per check (avoid spamming)
@@ -48,9 +48,9 @@ def fetch_crypto_news():
     return response.json().get("articles", [])
 
 
-def rewrite_with_claude(title: str, description: str, source: str, url: str) -> str:
-    """Send article to Claude and get a casual, conversational Telegram post back."""
-    prompt = f"""You write posts for a crypto & finance Telegram channel. 
+def rewrite_with_groq(title: str, description: str, source: str, url: str) -> str:
+    """Send article to Groq and get a casual, conversational Telegram post back."""
+    prompt = f"""You write posts for a crypto & finance Telegram channel.
 Your tone is casual, conversational, and friendly — like texting a mate about something interesting you just read.
 Use 1-2 relevant emojis. Keep it under 200 words. End with the article link.
 
@@ -62,24 +62,23 @@ Link: {url}
 Write the Telegram post now. No preamble, just the post itself."""
 
     headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
     }
     body = {
-        "model": "claude-sonnet-4-20250514",
-        "max_tokens": 400,
+        "model": "llama3-8b-8192",
         "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 400,
     }
     response = requests.post(
-        "https://api.anthropic.com/v1/messages",
+        "https://api.groq.com/openai/v1/chat/completions",
         headers=headers,
         json=body,
         timeout=30,
     )
     response.raise_for_status()
     data = response.json()
-    return data["content"][0]["text"].strip()
+    return data["choices"][0]["message"]["content"].strip()
 
 
 def post_to_telegram(message: str):
@@ -131,8 +130,8 @@ def run():
 
                 print(f"  New article: {title[:60]}...")
 
-                # Rewrite with Claude
-                post_text = rewrite_with_claude(title, description, source, url)
+                # Rewrite with Groq
+                post_text = rewrite_with_groq(title, description, source, url)
 
                 # Post to Telegram
                 post_to_telegram(post_text)
