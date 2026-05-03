@@ -255,7 +255,7 @@ def post_weekly_recap(crypto):
         + "— Gold and oil remained key indicators to watch\n\n"
         + "Overall it was " + week_tone + ".\n\n"
         + "New week ahead. Stay focused, manage your risk.\n\n"
-        + "_Follow @Coindex00 for daily updates all week_"
+        + "_Follow @coindex2 for daily updates all week_"
     )
     post_to_telegram(message)
     print("  Posted weekly recap!")
