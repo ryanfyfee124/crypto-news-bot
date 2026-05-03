@@ -28,7 +28,7 @@ def save_posted_ids(ids):
 def fetch_crypto_news():
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": "crypto OR bitcoin OR ethereum OR finance OR stocks",
+        "q": "crypto OR bitcoin OR ethereum OR gold OR silver OR stocks OR forex OR nasdaq OR dow jones OR S&P 500 OR commodities OR investing",
         "language": "en",
         "sortBy": "publishedAt",
         "pageSize": 10,
