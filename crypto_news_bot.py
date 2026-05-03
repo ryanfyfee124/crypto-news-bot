@@ -1,5 +1,7 @@
-from dotenv import load_dotenv
-load_dotenv()
+fimport os
+import time
+import json
+import requests
 
 NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
