@@ -12,31 +12,23 @@ CHECK_INTERVAL_MINUTES = 10
 MAX_ARTICLES_PER_RUN = 1
 POSTED_IDS_FILE = "posted_articles.json"
 
-# All RSS feeds covering every topic requested
 RSS_FEEDS = [
-    # Crypto news
     ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
     ("https://decrypt.co/feed", "Decrypt"),
-    # Finance & stock market
     ("https://feeds.bloomberg.com/markets/news.rss", "Bloomberg"),
     ("https://www.cnbc.com/id/10000664/device/rss/rss.html", "CNBC Markets"),
     ("https://www.cnbc.com/id/15839135/device/rss/rss.html", "CNBC Finance"),
-    # Gold, silver, oil & commodities
     ("https://www.kitco.com/rss/news.xml", "Kitco"),
     ("https://oilprice.com/rss/main", "OilPrice"),
-    # Trump & politics
     ("https://feeds.foxnews.com/foxnews/politics", "Fox News Politics"),
     ("https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml", "NY Times Politics"),
-    # Global crypto regulation & countries
     ("https://www.theblock.co/rss.xml", "The Block"),
     ("https://bitcoinmagazine.com/.rss/full/", "Bitcoin Magazine"),
-    # Companies using crypto & BlackRock
     ("https://www.reuters.com/finance/rss", "Reuters Finance"),
     ("https://feeds.marketwatch.com/marketwatch/topstories/", "MarketWatch"),
 ]
 
-# Keywords to filter relevant articles
 KEYWORDS = [
     "bitcoin", "crypto", "blockchain", "ethereum", "blackrock", "etf",
     "gold", "silver", "oil", "platinum", "palladium", "commodity",
@@ -100,32 +92,28 @@ def fetch_bitcoin_data():
     r = requests.get(price_url, params=params, timeout=10)
     r.raise_for_status()
     data = r.json()["bitcoin"]
-
-    chart_url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    chart_params = {"vs_currency": "usd", "days": "7"}
-    r2 = requests.get(chart_url, params=chart_params, timeout=10)
-    r2.raise_for_status()
-    prices = r2.json()["prices"]
-    price_values = [str(round(p[1])) for p in prices]
-    return data, price_values
+    return data
 
 
-def build_chart_url(price_values):
-    labels = [""] * len(price_values)
-    chart_config = (
-        '{"type":"line","data":{"labels":' + str(labels).replace("'", '"') + ','
-        '"datasets":[{"label":"BTC Price (USD)",'
-        '"data":[' + ",".join(price_values) + '],'
-        '"borderColor":"#F7931A",'
-        '"backgroundColor":"rgba(247,147,26,0.1)",'
-        '"borderWidth":2,'
-        '"pointRadius":0,'
-        '"fill":true}]},'
-        '"options":{"plugins":{"legend":{"display":false}},'
-        '"scales":{"x":{"display":false},'
-        '"y":{"ticks":{"callback":"function(v){return \'$\'+v.toLocaleString()}"}}}}}'
+def build_bitcoin_update():
+    data = fetch_bitcoin_data()
+    price = data["usd"]
+    change = data["usd_24h_change"]
+    volume = data["usd_24h_vol"]
+    market_cap = data["usd_market_cap"]
+    arrow = "🟢" if change >= 0 else "🔴"
+    trend = "📈" if change >= 0 else "📉"
+    # Use CoinGecko's 7 day sparkline chart image
+    chart_url = "https://www.coingecko.com/coins/bitcoin/sparkline.svg"
+    message = (
+        "₿ *Bitcoin Price Update* " + trend + "\n\n"
+        + arrow + " *Price:* $" + "{:,.2f}".format(price) + "\n"
+        + "📊 *24h Change:* " + "{:+.2f}".format(change) + "%\n"
+        + "💰 *Volume:* $" + "{:,.0f}".format(volume) + "\n"
+        + "🏦 *Market Cap:* $" + "{:,.0f}".format(market_cap) + "\n\n"
+        + "_7 day price chart_"
     )
-    return "https://quickchart.io/chart?c=" + requests.utils.quote(chart_config) + "&width=600&height=300&backgroundColor=white"
+    return message, chart_url
 
 
 def send_bitcoin_chart_to_telegram(message, chart_url):
@@ -141,34 +129,14 @@ def send_bitcoin_chart_to_telegram(message, chart_url):
     return response.json()
 
 
-def build_bitcoin_update():
-    data, price_values = fetch_bitcoin_data()
-    chart_url = build_chart_url(price_values)
-    price = data["usd"]
-    change = data["usd_24h_change"]
-    volume = data["usd_24h_vol"]
-    market_cap = data["usd_market_cap"]
-    arrow = "🟢" if change >= 0 else "🔴"
-    trend = "📈" if change >= 0 else "📉"
-    message = (
-        "₿ *Bitcoin Price Update* " + trend + "\n\n"
-        + arrow + " *Price:* $" + "{:,.2f}".format(price) + "\n"
-        + "📊 *24h Change:* " + "{:+.2f}".format(change) + "%\n"
-        + "💰 *Volume:* $" + "{:,.0f}".format(volume) + "\n"
-        + "🏦 *Market Cap:* $" + "{:,.0f}".format(market_cap) + "\n\n"
-        + "_7 day price chart_"
-    )
-    return message, chart_url
-
-
 def rewrite_with_groq(title, description, source):
     prompt = (
         "You write posts for a crypto, finance & markets Telegram channel.\n"
         "Your tone is very casual, short and punchy - like a friend texting you hot news.\n"
-"Max 3-4 sentences. No exclamation marks. No speech marks ever. No formal language. Do not include any links.\n"
-"Only use emojis in about half of posts - not every post. When you do use them, make them relevant and specific.\n"
-"Occasionally capitalise important words for emphasis e.g. MASSIVE, HUGE, BREAKING, ALL TIME HIGH.\n"
-"Sometimes make key words or phrases bold using *word* markdown formatting. Not in every post.\n\n"
+        "Max 3-4 sentences. No exclamation marks. No speech marks or quotation marks ever. No formal language. Do not include any links.\n"
+        "Only use emojis in about half of posts - not every post. When you do use them, make them relevant and specific.\n"
+        "Occasionally capitalise important words for emphasis e.g. MASSIVE, HUGE, BREAKING, ALL TIME HIGH.\n"
+        "Sometimes make key words or phrases bold using *word* markdown formatting. Not in every post.\n\n"
         "Article title: " + title + "\n"
         "Summary: " + description + "\n"
         "Source: " + source + "\n\n"
