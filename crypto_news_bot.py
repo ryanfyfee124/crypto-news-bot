@@ -4,7 +4,7 @@ import json
 import requests
 
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8704241956:AAErQGx47GDGS8qF5fwWESMwr8dTzc5JKJ8")
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
