@@ -12,9 +12,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 MAX_ARTICLES_PER_RUN = 1
 POSTED_IDS_FILE = "posted_articles.json"
-STATE_FILE = "bot_state.json"
 
-# Removed broken feeds
 RSS_FEEDS = [
     ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
@@ -46,37 +44,17 @@ KEYWORDS = [
     "strategic reserve", "crypto reserve", "bitcoin act",
 ]
 
-WEEKLY_POLLS = [
-    ("Where is BTC heading this week?", ["📈 Higher", "📉 Lower", "➡️ Sideways"]),
-    ("Are you bullish or bearish on crypto right now?", ["🟢 Bullish", "🔴 Bearish", "🤷 Neutral"]),
-    ("Which asset will perform best this month?", ["₿ Bitcoin", "💛 Gold", "📊 Stocks"]),
-    ("Will BTC hit a new all time high this year?", ["✅ Yes", "❌ No", "🤔 Maybe"]),
-    ("How are you positioned right now?", ["🟢 Mostly long", "🔴 Mostly short", "💵 In cash"]),
-    ("Best time to buy Bitcoin?", ["🔥 Right now", "📉 Wait for dip", "🚫 Not buying"]),
+# Free crypto related images to attach to some posts
+POST_IMAGES = [
+    "https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=800",
+    "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800",
+    "https://images.unsplash.com/photo-1605792657660-596af9009e82?w=800",
+    "https://images.unsplash.com/photo-1622630998477-20aa696ecb05?w=800",
+    "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800",
+    "https://images.unsplash.com/photo-1640340434855-6084b1f4901c?w=800",
+    "https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=800",
+    "https://images.unsplash.com/photo-1634704784915-aacf363b021f?w=800",
 ]
-
-# Cache prices to avoid hitting CoinGecko too often
-price_cache = {"data": None, "last_fetch": 0}
-
-
-def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    return {
-        "last_btc_post": 0,
-        "last_morning_brief": 0,
-        "last_evening_wrap": 0,
-        "last_weekly_recap": 0,
-        "last_poll": 0,
-        "last_correlation": 0,
-        "last_btc_price": 0,
-    }
-
-
-def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
 
 
 def load_posted_ids():
@@ -118,272 +96,42 @@ def fetch_all_news():
     return articles
 
 
-def fetch_market_prices():
-    # Only call CoinGecko every 10 minutes to avoid rate limits
-    now = time.time()
-    if price_cache["data"] and now - price_cache["last_fetch"] < 600:
-        return price_cache["data"]
-    try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={
-                "ids": "bitcoin,ethereum,solana",
-                "vs_currencies": "usd",
-                "include_24hr_change": "true",
-            },
-            timeout=15,
-        )
-        r.raise_for_status()
-        price_cache["data"] = r.json()
-        price_cache["last_fetch"] = now
-        return price_cache["data"]
-    except Exception as e:
-        print("  Price fetch error: " + str(e))
-        return price_cache["data"]  # Return cached data if available
-
-
-def fetch_bitcoin_chart():
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": "7"}
-    r = requests.get(url, params=params, timeout=15)
-    r.raise_for_status()
-    prices = r.json()["prices"]
-    return [round(p[1]) for p in prices]
-
-
-def build_chart_image_url(prices):
-    price_str = ",".join([str(p) for p in prices])
-    labels = ",".join(["" for _ in prices])
-    config = (
-        '{"type":"line","data":{"labels":[' + labels + '],'
-        '"datasets":[{"data":[' + price_str + '],'
-        '"borderColor":"#F7931A",'
-        '"backgroundColor":"rgba(247,147,26,0.1)",'
-        '"borderWidth":2,'
-        '"pointRadius":0,'
-        '"fill":true}]},'
-        '"options":{'
-        '"plugins":{"legend":{"display":false}},'
-        '"scales":{'
-        '"x":{"display":false},'
-        '"y":{"ticks":{"color":"#aaaaaa"},'
-        '"grid":{"color":"rgba(255,255,255,0.05)"}}}}}'
-    )
-    return (
-        "https://quickchart.io/chart?c="
-        + requests.utils.quote(config)
-        + "&width=700&height=350&backgroundColor=%23131722"
-    )
-
-
-def arrow(change):
-    return "🟢" if change >= 0 else "🔴"
-
-
-def fmt_change(change):
-    return "{:+.2f}".format(change) + "%"
-
-
-def post_morning_brief(crypto):
-    btc = crypto.get("bitcoin", {})
-    eth = crypto.get("ethereum", {})
-    sol = crypto.get("solana", {})
-    btc_price = btc.get("usd", 0)
-    btc_change = btc.get("usd_24h_change", 0)
-    eth_price = eth.get("usd", 0)
-    eth_change = eth.get("usd_24h_change", 0)
-    sol_price = sol.get("usd", 0)
-    sol_change = sol.get("usd_24h_change", 0)
-    sentiment = "bullish" if btc_change > 1 else "bearish" if btc_change < -1 else "mixed"
-    watch = "Key level to watch: $" + "{:,.0f}".format(round(btc_price / 1000) * 1000)
-    message = (
-        "🌅 *GOOD MORNING — DAILY MARKET BRIEF*\n\n"
-        + arrow(btc_change) + " *BTC:* $" + "{:,.0f}".format(btc_price) + " (" + fmt_change(btc_change) + ")\n"
-        + arrow(eth_change) + " *ETH:* $" + "{:,.0f}".format(eth_price) + " (" + fmt_change(eth_change) + ")\n"
-        + arrow(sol_change) + " *SOL:* $" + "{:,.0f}".format(sol_price) + " (" + fmt_change(sol_change) + ")\n\n"
-        + "📊 *Sentiment:* Market looking " + sentiment + " to start the day\n"
-        + "⚠️ *Watch:* " + watch + " — reaction here sets the tone\n\n"
-        + "_Stay sharp. More updates throughout the day._"
-    )
-    post_to_telegram(message)
-    print("  Posted morning brief!")
-
-
-def post_evening_wrap(crypto):
-    btc = crypto.get("bitcoin", {})
-    eth = crypto.get("ethereum", {})
-    btc_price = btc.get("usd", 0)
-    btc_change = btc.get("usd_24h_change", 0)
-    eth_change = eth.get("usd_24h_change", 0)
-    if btc_change > 2:
-        summary = "Strong day for crypto. Bulls in control."
-        outlook = "If momentum holds overnight, expect continuation tomorrow."
-    elif btc_change < -2:
-        summary = "Rough day across the board. Bears took charge."
-        outlook = "Watch for support levels overnight. Key test incoming."
-    else:
-        summary = "Choppy day with no clear direction."
-        outlook = "Market consolidating. Big move could be coming soon."
-    message = (
-        "🌙 *EVENING MARKET WRAP*\n\n"
-        + arrow(btc_change) + " *BTC:* $" + "{:,.0f}".format(btc_price) + " (" + fmt_change(btc_change) + ")\n"
-        + arrow(eth_change) + " *ETH 24h:* " + fmt_change(eth_change) + "\n\n"
-        + "📝 *Summary:* " + summary + "\n"
-        + "🔮 *Outlook:* " + outlook + "\n\n"
-        + "_See you tomorrow. Stay safe out there._"
-    )
-    post_to_telegram(message)
-    print("  Posted evening wrap!")
-
-
-def post_weekly_recap(crypto):
-    btc = crypto.get("bitcoin", {})
-    btc_price = btc.get("usd", 0)
-    btc_change = btc.get("usd_24h_change", 0)
-    if btc_change > 0:
-        week_tone = "a positive week for crypto"
-        emoji = "🟢"
-    else:
-        week_tone = "a tough week for crypto"
-        emoji = "🔴"
-    message = (
-        "📅 *WEEKLY RECAP — COINDEX*\n\n"
-        + emoji + " Bitcoin finishing the week at *$" + "{:,.0f}".format(btc_price) + "*\n\n"
-        + "Here is what moved markets this week:\n"
-        + "— Macro sentiment and Fed policy dominated headlines\n"
-        + "— Trump news continued to impact risk assets\n"
-        + "— Gold and oil remained key indicators to watch\n\n"
-        + "Overall it was " + week_tone + ".\n\n"
-        + "New week ahead. Stay focused, manage your risk.\n\n"
-        + "_Follow @coindex2 for daily updates all week_"
-    )
-    post_to_telegram(message)
-    print("  Posted weekly recap!")
-
-
-def post_price_alert(btc_price, last_price):
-    if last_price == 0 or btc_price == 0:
-        return False
-    price_change_pct = ((btc_price - last_price) / last_price) * 100
-    if abs(price_change_pct) >= 3:
-        direction = "surged" if price_change_pct > 0 else "dropped"
-        emoji = "🚀" if price_change_pct > 0 else "📉"
-        impact = "Bulls gaining momentum — watch for continuation." if price_change_pct > 0 else "Support levels being tested. Watch closely."
-        message = (
-            emoji + " *PRICE ALERT*\n\n"
-            + "Bitcoin has " + direction + " *" + "{:+.1f}".format(price_change_pct) + "%* in the last few hours\n\n"
-            + "*Current price:* $" + "{:,.0f}".format(btc_price) + "\n"
-            + impact
-        )
-        post_to_telegram(message)
-        print("  Posted price alert!")
-        return True
-    return False
-
-
-def post_correlation(crypto):
-    btc_change = crypto.get("bitcoin", {}).get("usd_24h_change", 0)
-    eth_change = crypto.get("ethereum", {}).get("usd_24h_change", 0)
-    if btc_change < -1 and eth_change < -1:
-        message = (
-            "⚠️ *MARKET INSIGHT*\n\n"
-            "Crypto seeing red across the board today. "
-            "When BTC and ETH drop together like this, it usually signals macro pressure — "
-            "could be dollar strength, risk-off sentiment, or big news incoming.\n\n"
-            "Gold worth watching as a safe haven signal right now."
-        )
-    elif btc_change > 1 and eth_change > 1:
-        message = (
-            "🔥 *MARKET INSIGHT*\n\n"
-            "BTC and ETH both pushing higher today. "
-            "Broad crypto strength usually means institutional money is moving in. "
-            "Watch for altcoins to follow if momentum continues.\n\n"
-            "Risk-on sentiment building across markets."
-        )
-    elif btc_change > 1 and eth_change < 0:
-        message = (
-            "📊 *MARKET INSIGHT*\n\n"
-            "Bitcoin outperforming Ethereum today — Bitcoin dominance rising. "
-            "This often happens when institutions buy BTC but avoid alts. "
-            "Could signal caution in the broader crypto market."
-        )
-    else:
-        return
-    post_to_telegram(message)
-    print("  Posted market correlation insight!")
-
-
-def post_weekly_poll():
-    poll = random.choice(WEEKLY_POLLS)
-    question = poll[0]
-    options = poll[1]
-    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPoll"
-    payload = {
-        "chat_id": TELEGRAM_CHANNEL,
-        "question": question,
-        "options": options,
-        "is_anonymous": True,
-    }
-    response = requests.post(url, json=payload, timeout=10)
-    response.raise_for_status()
-    print("  Posted weekly poll!")
-
-
-def post_btc_chart():
-    prices = fetch_bitcoin_chart()
-    chart_url = build_chart_image_url(prices)
-    crypto = fetch_market_prices()
-    if not crypto:
-        return
-    btc = crypto.get("bitcoin", {})
-    price = btc.get("usd", 0)
-    change = btc.get("usd_24h_change", 0)
-    trend = "📈" if change >= 0 else "📉"
-    message = (
-        "₿ *Bitcoin 7-Day Chart* " + trend + "\n\n"
-        + arrow(change) + " *Price:* $" + "{:,.2f}".format(price) + "\n"
-        + "📊 *24h:* " + fmt_change(change) + "\n\n"
-        + "_Updated chart — COINDEX_"
-    )
-    send_photo_to_telegram(message, chart_url)
-    print("  Posted BTC chart!")
-
-
-def send_photo_to_telegram(message, photo_url):
-    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto"
-    payload = {
-        "chat_id": TELEGRAM_CHANNEL,
-        "photo": photo_url,
-        "caption": message,
-        "parse_mode": "Markdown",
-    }
-    response = requests.post(url, json=payload, timeout=30)
-    response.raise_for_status()
-    return response.json()
-
-
 def rewrite_with_groq(title, description, source):
+    # Randomly pick a writing style to vary posts
+    styles = [
+        "casual and punchy like a friend texting breaking news",
+        "direct and confident like a trader who knows whats going on",
+        "slightly dramatic but factual like a news anchor",
+        "sharp and analytical like a market analyst",
+    ]
+    style = random.choice(styles)
+
     prompt = (
-        "You write posts for a professional crypto & finance Telegram news channel with 60,000+ subscribers.\n"
-        "Study these real post examples and copy the exact style:\n\n"
+        "You write posts for a professional crypto & finance Telegram channel.\n"
+        "Your writing style for this post: " + style + "\n\n"
+        "Study these real examples and copy the format:\n\n"
         "Example 1: ELON MUSK CALLS 95% CRYPTO PROJECTS SCAMS\n"
-        "Musk: Some Crypto Assets Have Merit, but Most of Them Are Scams\n"
-        "According to Fortune, during his lawsuit against OpenAI, Elon Musk stated that some crypto assets have merit, but most are scams.\n\n"
-        "Example 2: JUST IN: US Treasury Secretary Bessent says the US has seized $450 million in Iranian cryptocurrency.\n\n"
-        "Example 3: BULLISH: Senator Cynthia Lummis says bitcoin and crypto market structure legislation will be marked up in May.\n\n"
-        "Example 4: Trump signs executive order pausing tariffs for 90 days. Markets surge immediately after announcement.\n\n"
-        "Example 5: JUST IN: Fed Chair Powell says interest rates will remain unchanged. Bitcoin drops 3% on the news.\n\n"
+        "Musk says some assets have merit but most are scams. "
+        "This comes as Tesla continues to hold billions in Bitcoin.\n\n"
+        "Example 2: JUST IN: US Treasury seizes $450 million in Iranian cryptocurrency.\n\n"
+        "Example 3: BULLISH: Senator Lummis confirms crypto legislation will be marked up in May. "
+        "This could be the regulatory clarity markets have been waiting for.\n\n"
+        "Example 4: Trump pauses tariffs for 90 days. "
+        "Bitcoin jumps 4% as markets react to the news — risk-on is back.\n\n"
+        "Example 5: Fed holds rates steady. *Powell* signals no cuts coming soon. "
+        "Crypto dips slightly on the news.\n\n"
         "Rules:\n"
         "- Start breaking news with JUST IN:\n"
-        "- Start bullish news with BULLISH:\n"
-        "- Use ALL CAPS for major headline announcements\n"
-        "- Use relevant country flag emojis when mentioning countries\n"
-        "- Only use hashtags occasionally when they feel natural, not in every post\n"
-        "- Keep it 1-3 sentences max\n"
+        "- Start very bullish news with BULLISH:\n"
+        "- Use ALL CAPS only for the biggest headlines\n"
+        "- Use country flag emojis when mentioning specific countries\n"
+        "- Only use hashtags in about 1 in 5 posts\n"
+        "- 1-3 sentences max\n"
         "- No links ever\n"
         "- No speech marks or quotation marks\n"
-        "- Sometimes use *bold* for key names or numbers\n"
-        "- Always mention how news impacts crypto or markets when relevant\n\n"
+        "- Use *bold* for key figures or numbers occasionally\n"
+        "- When relevant mention the market impact — did crypto go up or down\n"
+        "- Sound like a real person, not a robot\n\n"
         "Article title: " + title + "\n"
         "Summary: " + description + "\n"
         "Source: " + source + "\n\n"
@@ -397,7 +145,7 @@ def rewrite_with_groq(title, description, source):
         "model": "llama-3.1-8b-instant",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 200,
-        "temperature": 0.7,
+        "temperature": 0.85,
     }
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -422,75 +170,28 @@ def post_to_telegram(message):
     return response.json()
 
 
+def post_with_image(message, image_url):
+    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto"
+    payload = {
+        "chat_id": TELEGRAM_CHANNEL,
+        "photo": image_url,
+        "caption": message,
+        "parse_mode": "Markdown",
+    }
+    response = requests.post(url, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
 def run():
     print("COINDEX Bot started!")
-    print("Full schedule active...\n")
+    print("Posting at random human-like intervals...\n")
 
     posted_ids = load_posted_ids()
-    state = load_state()
+    post_count = 0
 
     while True:
         try:
-            now = time.time()
-            hour = datetime.now().hour
-            weekday = datetime.now().weekday()
-
-            # Fetch prices (cached — only hits API every 10 mins)
-            crypto = fetch_market_prices()
-            btc_price = crypto.get("bitcoin", {}).get("usd", 0) if crypto else 0
-            btc_change = crypto.get("bitcoin", {}).get("usd_24h_change", 0) if crypto else 0
-
-            # Morning brief at 8am
-            if hour == 8 and now - state["last_morning_brief"] > 43200 and crypto:
-                post_morning_brief(crypto)
-                state["last_morning_brief"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # Evening wrap at 8pm
-            if hour == 20 and now - state["last_evening_wrap"] > 43200 and crypto:
-                post_evening_wrap(crypto)
-                state["last_evening_wrap"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # Weekly recap on Sunday
-            if weekday == 6 and now - state["last_weekly_recap"] > 86400 and crypto:
-                post_weekly_recap(crypto)
-                state["last_weekly_recap"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # Weekly poll every 3 days
-            if now - state["last_poll"] > 259200:
-                post_weekly_poll()
-                state["last_poll"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # BTC chart every 12 hours
-            if now - state["last_btc_post"] > 43200:
-                post_btc_chart()
-                state["last_btc_post"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # Market correlation insight every 6 hours
-            if now - state["last_correlation"] > 21600 and crypto:
-                post_correlation(crypto)
-                state["last_correlation"] = now
-                save_state(state)
-                time.sleep(5)
-
-            # Price alert if BTC moves 3%+
-            if btc_price > 0 and state["last_btc_price"] > 0:
-                post_price_alert(btc_price, state["last_btc_price"])
-
-            if btc_price > 0:
-                state["last_btc_price"] = btc_price
-                save_state(state)
-
-            # Breaking news
             print("[" + time.strftime("%H:%M:%S") + "] Fetching latest news...")
             articles = fetch_all_news()
             new_count = 0
@@ -498,21 +199,39 @@ def run():
             for article in articles:
                 if new_count >= MAX_ARTICLES_PER_RUN:
                     break
+
                 url = article.get("url", "")
                 title = article.get("title", "")
                 description = article.get("description", "") or ""
                 source = article.get("source", {}).get("name", "Unknown")
+
                 if not url or not title or url in posted_ids:
                     continue
+
                 if "[Removed]" in title:
                     continue
+
                 print("  New article: " + title[:60] + "...")
+
                 post_text = rewrite_with_groq(title, description, source)
-                post_to_telegram(post_text)
-                print("  Posted to Telegram!")
+
+                # Attach an image to roughly 1 in 3 posts
+                if post_count % 3 == 0:
+                    image_url = random.choice(POST_IMAGES)
+                    try:
+                        post_with_image(post_text, image_url)
+                        print("  Posted to Telegram with image!")
+                    except Exception:
+                        post_to_telegram(post_text)
+                        print("  Posted to Telegram (image failed, text only)!")
+                else:
+                    post_to_telegram(post_text)
+                    print("  Posted to Telegram!")
+
                 posted_ids.add(url)
                 save_posted_ids(posted_ids)
                 new_count += 1
+                post_count += 1
                 time.sleep(3)
 
             if new_count == 0:
@@ -525,7 +244,8 @@ def run():
         except Exception as e:
             print("  Unexpected error: " + str(e))
 
-        sleep_minutes = random.randint(7, 25)
+        # Human-like random intervals — sometimes quick, sometimes slower
+        sleep_minutes = random.choice([8, 10, 12, 15, 18, 20, 25, 11, 14, 17])
         print("  Sleeping for " + str(sleep_minutes) + " minutes...\n")
         time.sleep(sleep_minutes * 60)
 
