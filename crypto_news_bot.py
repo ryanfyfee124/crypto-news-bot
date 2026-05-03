@@ -176,7 +176,7 @@ def rewrite_with_groq(title, description, source):
         "- Start breaking news with JUST IN: or ALL CAPS headline\n"
         "- Start bullish news with BULLISH: or use rocket emoji\n"
         "- Use relevant country flag emojis when mentioning countries\n"
-        "- Add relevant hashtags like #BTC #ETH #XRP #Gold #Oil at the end\n"
+        "- Only use hashtags occasionally when they feel natural, not in every post\n"
         "- Keep it 1-3 sentences max\n"
         "- No links ever\n"
         "- No speech marks or quotation marks\n"
