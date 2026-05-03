@@ -6,7 +6,7 @@ import requests
 # ============================================================
 # CONFIGURATION — add your keys here or use env variables
 # ============================================================
-NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "")
+NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "cf31c1b5840740eda902f42b0ab0927c")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "")
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
