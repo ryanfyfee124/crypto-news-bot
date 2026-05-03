@@ -1,12 +1,15 @@
-import os
-import time
-import json
-import requests
+from dotenv import load_dotenv
+load_dotenv()
+
+NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "")
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
 
 # ============================================================
 # CONFIGURATION — add your keys here or use env variables
 # ============================================================
-NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "")
+NEWS_API_KEY       = os.getenv("NEWS_API_KEY", "cf31c1b5840740eda902f42b0ab0927c")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
