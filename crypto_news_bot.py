@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import random
 import requests
 import xml.etree.ElementTree as ET
 
@@ -8,7 +9,6 @@ TELEGRAM_BOT_TOKEN = "8704241956:AAErQGx47GDGS8qF5fwWESMwr8dTzc5JKJ8"
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-import random
 MAX_ARTICLES_PER_RUN = 1
 POSTED_IDS_FILE = "posted_articles.json"
 
@@ -91,51 +91,47 @@ def fetch_bitcoin_data():
     }
     r = requests.get(price_url, params=params, timeout=10)
     r.raise_for_status()
-    data = r.json()["bitcoin"]
-
-    # Get 7 day OHLC data for candlestick chart
-    ohlc_url = "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc"
-    ohlc_params = {"vs_currency": "usd", "days": "7"}
-    r2 = requests.get(ohlc_url, params=ohlc_params, timeout=10)
-    r2.raise_for_status()
-    ohlc = r2.json()
-    return data, ohlc
+    return r.json()["bitcoin"]
 
 
-def build_chart_url(ohlc):
-    # Build a dark themed candlestick chart using quickchart.io
-    timestamps = [str(i) for i in range(len(ohlc))]
-    opens = [str(c[1]) for c in ohlc]
-    highs = [str(c[2]) for c in ohlc]
-    lows = [str(c[3]) for c in ohlc]
-    closes = [str(c[4]) for c in ohlc]
+def fetch_bitcoin_chart():
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    params = {"vs_currency": "usd", "days": "7"}
+    r = requests.get(url, params=params, timeout=10)
+    r.raise_for_status()
+    prices = r.json()["prices"]
+    return [round(p[1]) for p in prices]
 
-    chart_config = (
-        '{"type":"candlestick",'
-        '"data":{"datasets":[{'
-        '"label":"BTC/USD",'
-        '"data":[' + ",".join([
-            '{"x":' + str(i) + ',"o":' + opens[i] + ',"h":' + highs[i] + ',"l":' + lows[i] + ',"c":' + closes[i] + '}'
-            for i in range(len(ohlc))
-        ]) + '],'
-        '"color":{"up":"rgba(38,166,154,1)","down":"rgba(239,83,80,1)","unchanged":"rgba(38,166,154,1)"},'
-        '"borderColor":{"up":"rgba(38,166,154,1)","down":"rgba(239,83,80,1)","unchanged":"rgba(38,166,154,1)"}'}]},'
+
+def build_chart_image_url(prices):
+    price_str = ",".join([str(p) for p in prices])
+    labels = ",".join(["" for _ in prices])
+    config = (
+        '{"type":"line","data":{"labels":[' + labels + '],'
+        '"datasets":[{"data":[' + price_str + '],'
+        '"borderColor":"#F7931A",'
+        '"backgroundColor":"rgba(247,147,26,0.1)",'
+        '"borderWidth":2,'
+        '"pointRadius":0,'
+        '"fill":true}]},'
         '"options":{'
         '"plugins":{"legend":{"display":false}},'
         '"scales":{'
-        '"x":{"ticks":{"color":"#aaaaaa"},"grid":{"color":"rgba(255,255,255,0.05)"}},'
-        '"y":{"ticks":{"color":"#aaaaaa","callback":"function(v){return \'$\'+v.toLocaleString()}"},'
+        '"x":{"display":false},'
+        '"y":{"ticks":{"color":"#aaaaaa"},'
         '"grid":{"color":"rgba(255,255,255,0.05)"}}}}}'
     )
     return (
-        "https://quickchart.io/chart?c=" + requests.utils.quote(chart_config)
-        + "&width=700&height=380&backgroundColor=%23131722"
+        "https://quickchart.io/chart?c="
+        + requests.utils.quote(config)
+        + "&width=700&height=350&backgroundColor=%23131722"
     )
 
 
 def build_bitcoin_update():
-    data, ohlc = fetch_bitcoin_data()
-    chart_url = build_chart_url(ohlc)
+    data = fetch_bitcoin_data()
+    prices = fetch_bitcoin_chart()
+    chart_url = build_chart_image_url(prices)
     price = data["usd"]
     change = data["usd_24h_change"]
     volume = data["usd_24h_vol"]
@@ -148,16 +144,16 @@ def build_bitcoin_update():
         + "📊 *24h Change:* " + "{:+.2f}".format(change) + "%\n"
         + "💰 *Volume:* $" + "{:,.0f}".format(volume) + "\n"
         + "🏦 *Market Cap:* $" + "{:,.0f}".format(market_cap) + "\n\n"
-        + "_7 day candlestick chart_"
+        + "_7 day price chart_"
     )
     return message, chart_url
 
 
-def send_bitcoin_chart_to_telegram(message, chart_url):
+def send_photo_to_telegram(message, photo_url):
     url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto"
     payload = {
         "chat_id": TELEGRAM_CHANNEL,
-        "photo": chart_url,
+        "photo": photo_url,
         "caption": message,
         "parse_mode": "Markdown",
     }
@@ -171,19 +167,19 @@ def rewrite_with_groq(title, description, source):
         "You write posts for a professional crypto & finance Telegram news channel with 60,000+ subscribers.\n"
         "Study these real post examples and copy the exact style:\n\n"
         "Example 1: ELON MUSK CALLS 95% CRYPTO PROJECTS SCAMS\n"
-        "🦊 Musk: Some Crypto Assets Have Merit, but Most of Them Are Scams\n"
+        "Musk: Some Crypto Assets Have Merit, but Most of Them Are Scams\n"
         "According to Fortune, during his lawsuit against OpenAI, Elon Musk stated that some crypto assets have merit, but most are scams. #regulation\n\n"
-        "Example 2: JUST IN: 🇺🇸 US Treasury Secretary Bessent says the US has seized $450 million in Iranian cryptocurrency.\n\n"
-        "Example 3: 🔥 BULLISH: 🇺🇸 Senator Cynthia Lummis says bitcoin and crypto market structure legislation will be marked up in May.\n\n"
-        "Example 4: ONLY #BTC #AVAX #ADA #ETH #SOL #XRP #USDT #USDC #DOGE ARE LEGITIMATE ASSETS\n\n"
+        "Example 2: JUST IN: US Treasury Secretary Bessent says the US has seized $450 million in Iranian cryptocurrency.\n\n"
+        "Example 3: BULLISH: Senator Cynthia Lummis says bitcoin and crypto market structure legislation will be marked up in May.\n\n"
+        "Example 4: ONLY #BTC #ETH #SOL #XRP #USDT ARE LEGITIMATE ASSETS\n\n"
         "Rules:\n"
         "- Start breaking news with JUST IN: or ALL CAPS headline\n"
-        "- Start bullish news with 🔥 BULLISH: or 🚀\n"
+        "- Start bullish news with BULLISH: or use rocket emoji\n"
         "- Use relevant country flag emojis when mentioning countries\n"
         "- Add relevant hashtags like #BTC #ETH #XRP #Gold #Oil at the end\n"
         "- Keep it 1-3 sentences max\n"
         "- No links ever\n"
-        "- No speech marks\n"
+        "- No speech marks or quotation marks\n"
         "- Sometimes use *bold* for key names or numbers\n"
         "- Mix ALL CAPS headlines with normal sentence case\n\n"
         "Article title: " + title + "\n"
@@ -227,17 +223,18 @@ def post_to_telegram(message):
 
 def run():
     print("Crypto & Finance News Bot started!")
-    print("Posting news at random intervals...\n")
+    print("Posting at random intervals...\n")
 
     posted_ids = load_posted_ids()
     last_btc_post = 0
 
     while True:
         try:
+            # Post Bitcoin price chart every 12 hours
             if time.time() - last_btc_post > 43200:
                 try:
                     message, chart_url = build_bitcoin_update()
-                    send_bitcoin_chart_to_telegram(message, chart_url)
+                    send_photo_to_telegram(message, chart_url)
                     print("  Posted Bitcoin price chart!")
                     last_btc_post = time.time()
                 except Exception as e:
