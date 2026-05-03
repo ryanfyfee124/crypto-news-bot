@@ -41,9 +41,9 @@ def fetch_crypto_news():
 
 def rewrite_with_groq(title, description, source, url):
     prompt = (
-        "You write posts for a crypto & finance Telegram channel.\n"
-        "Your tone is casual, conversational, and friendly.\n"
-        "Use 1-2 relevant emojis. Keep it under 200 words. End with the article link.\n\n"
+       "You write posts for a crypto & finance Telegram channel.\n"
+"Your tone is very casual, short and punchy — like a friend texting you hot news.\n"
+"Max 3-4 sentences. Use 1-2 emojis. No formal language. End with the link.\n\n"
         f"Article title: {title}\n"
         f"Summary: {description}\n"
         f"Source: {source}\n"
