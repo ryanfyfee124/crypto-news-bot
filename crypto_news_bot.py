@@ -8,7 +8,7 @@ import requests
 # ============================================================
 NEWS_API_KEY       = os.getenv("cf31c1b5840740eda902f42b0ab0927c")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "@coindex00")
-TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "@coindex6")
+TELEGRAM_CHANNEL   = os.getenv("TELEGRAM_CHANNEL_ID", "@coindex2")
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "cf31c1b5840740eda902f42b0ab0927c")
 
 CHECK_INTERVAL_MINUTES = 15   # how often to check for new news
