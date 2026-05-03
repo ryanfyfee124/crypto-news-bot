@@ -70,10 +70,11 @@ Write the Telegram post now. No preamble, just the post itself."""
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
-    body = {
-        "model": "llama3-8b-8192",
+   body = {
+        "model": "llama3-groq-8b-8192-tool-use-preview",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 400,
+        "temperature": 0.7,
     }
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
