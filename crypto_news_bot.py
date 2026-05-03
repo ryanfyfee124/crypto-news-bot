@@ -22,7 +22,9 @@ RSS_FEEDS = [
     ("https://www.kitco.com/rss/news.xml", "Kitco"),
     ("https://oilprice.com/rss/main", "OilPrice"),
     ("https://feeds.foxnews.com/foxnews/politics", "Fox News Politics"),
+    ("https://feeds.foxnews.com/foxnews/latest", "Fox News"),
     ("https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml", "NY Times Politics"),
+    ("https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", "NY Times Economy"),
     ("https://www.theblock.co/rss.xml", "The Block"),
     ("https://bitcoinmagazine.com/.rss/full/", "Bitcoin Magazine"),
     ("https://www.reuters.com/finance/rss", "Reuters Finance"),
@@ -32,12 +34,17 @@ RSS_FEEDS = [
 KEYWORDS = [
     "bitcoin", "crypto", "blockchain", "ethereum", "blackrock", "etf",
     "gold", "silver", "oil", "platinum", "palladium", "commodity",
-    "trump", "federal reserve", "fed", "interest rate",
+    "trump", "donald trump", "trump tariff", "trump crypto", "trump bitcoin",
+    "trump executive order", "trump administration", "white house crypto",
+    "trump market", "trump stocks", "trump economy", "trump fed",
+    "federal reserve", "fed", "interest rate", "powell",
     "sec", "regulation", "crypto law", "digital asset",
     "stock market", "nasdaq", "s&p", "dow jones", "wall street",
     "tesla", "microstrategy", "coinbase", "binance",
     "china crypto", "russia crypto", "el salvador", "bitcoin reserve",
     "crypto ban", "crypto legal", "central bank", "cbdc",
+    "tariff", "trade war", "sanctions", "inflation", "recession",
+    "strategic reserve", "crypto reserve", "bitcoin act",
 ]
 
 
@@ -168,20 +175,22 @@ def rewrite_with_groq(title, description, source):
         "Study these real post examples and copy the exact style:\n\n"
         "Example 1: ELON MUSK CALLS 95% CRYPTO PROJECTS SCAMS\n"
         "Musk: Some Crypto Assets Have Merit, but Most of Them Are Scams\n"
-        "According to Fortune, during his lawsuit against OpenAI, Elon Musk stated that some crypto assets have merit, but most are scams. #regulation\n\n"
+        "According to Fortune, during his lawsuit against OpenAI, Elon Musk stated that some crypto assets have merit, but most are scams.\n\n"
         "Example 2: JUST IN: US Treasury Secretary Bessent says the US has seized $450 million in Iranian cryptocurrency.\n\n"
         "Example 3: BULLISH: Senator Cynthia Lummis says bitcoin and crypto market structure legislation will be marked up in May.\n\n"
-        "Example 4: ONLY #BTC #ETH #SOL #XRP #USDT ARE LEGITIMATE ASSETS\n\n"
+        "Example 4: Trump signs executive order pausing tariffs for 90 days. Markets surge immediately after announcement.\n\n"
+        "Example 5: JUST IN: Fed Chair Powell says interest rates will remain unchanged. Bitcoin drops 3% on the news.\n\n"
         "Rules:\n"
-        "- Start breaking news with JUST IN: or ALL CAPS headline\n"
-        "- Start bullish news with BULLISH: or use rocket emoji\n"
+        "- Start breaking news with JUST IN:\n"
+        "- Start bullish news with BULLISH:\n"
+        "- Use ALL CAPS for major headline announcements\n"
         "- Use relevant country flag emojis when mentioning countries\n"
         "- Only use hashtags occasionally when they feel natural, not in every post\n"
         "- Keep it 1-3 sentences max\n"
         "- No links ever\n"
         "- No speech marks or quotation marks\n"
         "- Sometimes use *bold* for key names or numbers\n"
-        "- Mix ALL CAPS headlines with normal sentence case\n\n"
+        "- Always mention how news impacts crypto or markets when relevant\n\n"
         "Article title: " + title + "\n"
         "Summary: " + description + "\n"
         "Source: " + source + "\n\n"
