@@ -8,7 +8,7 @@ TELEGRAM_BOT_TOKEN = "8704241956:AAErQGx47GDGS8qF5fwWESMwr8dTzc5JKJ8"
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-CHECK_INTERVAL_MINUTES = 10
+import random
 MAX_ARTICLES_PER_RUN = 1
 POSTED_IDS_FILE = "posted_articles.json"
 
@@ -92,26 +92,63 @@ def fetch_bitcoin_data():
     r = requests.get(price_url, params=params, timeout=10)
     r.raise_for_status()
     data = r.json()["bitcoin"]
-    return data
+
+    # Get 7 day OHLC data for candlestick chart
+    ohlc_url = "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc"
+    ohlc_params = {"vs_currency": "usd", "days": "7"}
+    r2 = requests.get(ohlc_url, params=ohlc_params, timeout=10)
+    r2.raise_for_status()
+    ohlc = r2.json()
+    return data, ohlc
+
+
+def build_chart_url(ohlc):
+    # Build a dark themed candlestick chart using quickchart.io
+    timestamps = [str(i) for i in range(len(ohlc))]
+    opens = [str(c[1]) for c in ohlc]
+    highs = [str(c[2]) for c in ohlc]
+    lows = [str(c[3]) for c in ohlc]
+    closes = [str(c[4]) for c in ohlc]
+
+    chart_config = (
+        '{"type":"candlestick",'
+        '"data":{"datasets":[{'
+        '"label":"BTC/USD",'
+        '"data":[' + ",".join([
+            '{"x":' + str(i) + ',"o":' + opens[i] + ',"h":' + highs[i] + ',"l":' + lows[i] + ',"c":' + closes[i] + '}'
+            for i in range(len(ohlc))
+        ]) + '],'
+        '"color":{"up":"rgba(38,166,154,1)","down":"rgba(239,83,80,1)","unchanged":"rgba(38,166,154,1)"},'
+        '"borderColor":{"up":"rgba(38,166,154,1)","down":"rgba(239,83,80,1)","unchanged":"rgba(38,166,154,1)"}'}]},'
+        '"options":{'
+        '"plugins":{"legend":{"display":false}},'
+        '"scales":{'
+        '"x":{"ticks":{"color":"#aaaaaa"},"grid":{"color":"rgba(255,255,255,0.05)"}},'
+        '"y":{"ticks":{"color":"#aaaaaa","callback":"function(v){return \'$\'+v.toLocaleString()}"},'
+        '"grid":{"color":"rgba(255,255,255,0.05)"}}}}}'
+    )
+    return (
+        "https://quickchart.io/chart?c=" + requests.utils.quote(chart_config)
+        + "&width=700&height=380&backgroundColor=%23131722"
+    )
 
 
 def build_bitcoin_update():
-    data = fetch_bitcoin_data()
+    data, ohlc = fetch_bitcoin_data()
+    chart_url = build_chart_url(ohlc)
     price = data["usd"]
     change = data["usd_24h_change"]
     volume = data["usd_24h_vol"]
     market_cap = data["usd_market_cap"]
     arrow = "🟢" if change >= 0 else "🔴"
     trend = "📈" if change >= 0 else "📉"
-    # Use CoinGecko's 7 day sparkline chart image
-    chart_url = "https://www.coingecko.com/coins/bitcoin/sparkline.svg"
     message = (
         "₿ *Bitcoin Price Update* " + trend + "\n\n"
         + arrow + " *Price:* $" + "{:,.2f}".format(price) + "\n"
         + "📊 *24h Change:* " + "{:+.2f}".format(change) + "%\n"
         + "💰 *Volume:* $" + "{:,.0f}".format(volume) + "\n"
         + "🏦 *Market Cap:* $" + "{:,.0f}".format(market_cap) + "\n\n"
-        + "_7 day price chart_"
+        + "_7 day candlestick chart_"
     )
     return message, chart_url
 
@@ -178,14 +215,13 @@ def post_to_telegram(message):
 
 def run():
     print("Crypto & Finance News Bot started!")
-    print("Posting news every " + str(CHECK_INTERVAL_MINUTES) + " minutes...\n")
+    print("Posting news at random intervals...\n")
 
     posted_ids = load_posted_ids()
     last_btc_post = 0
 
     while True:
         try:
-            # Post Bitcoin price chart every 12 hours
             if time.time() - last_btc_post > 43200:
                 try:
                     message, chart_url = build_bitcoin_update()
@@ -235,8 +271,9 @@ def run():
         except Exception as e:
             print("  Unexpected error: " + str(e))
 
-        print("  Sleeping for " + str(CHECK_INTERVAL_MINUTES) + " minutes...\n")
-        time.sleep(CHECK_INTERVAL_MINUTES * 60)
+        sleep_minutes = random.randint(7, 25)
+        print("  Sleeping for " + str(sleep_minutes) + " minutes...\n")
+        time.sleep(sleep_minutes * 60)
 
 
 if __name__ == "__main__":
