@@ -165,7 +165,9 @@ def rewrite_with_groq(title, description, source):
     prompt = (
         "You write posts for a crypto, finance & markets Telegram channel.\n"
         "Your tone is very casual, short and punchy - like a friend texting you hot news.\n"
-        "Max 3-4 sentences. Use 1-2 emojis. No formal language. Do not include any links.\n\n"
+"Max 3-4 sentences. No exclamation marks ever. No formal language. Do not include any links.\n"
+"Only use emojis in about half of posts - not every post. When you do use them, make them relevant and specific.\n"
+"Occasionally capitalise important words for emphasis e.g. MASSIVE, HUGE, BREAKING, ALL TIME HIGH.\n\n"
         "Article title: " + title + "\n"
         "Summary: " + description + "\n"
         "Source: " + source + "\n\n"
