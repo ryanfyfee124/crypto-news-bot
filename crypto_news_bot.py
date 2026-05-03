@@ -2,14 +2,14 @@ import os
 import time
 import json
 import requests
+import xml.etree.ElementTree as ET
 
-NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 TELEGRAM_BOT_TOKEN = "8704241956:AAErQGx47GDGS8qF5fwWESMwr8dTzc5JKJ8"
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-CHECK_INTERVAL_MINUTES = 10
-MAX_ARTICLES_PER_RUN = 2
+CHECK_INTERVAL_MINUTES = 5
+MAX_ARTICLES_PER_RUN = 3
 POSTED_IDS_FILE = "posted_articles.json"
 
 
@@ -26,28 +26,68 @@ def save_posted_ids(ids):
 
 
 def fetch_crypto_news():
-    url = "https://newsapi.org/v2/everything"
+    feeds = [
+        ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
+        ("https://cointelegraph.com/rss", "CoinTelegraph"),
+        ("https://decrypt.co/feed", "Decrypt"),
+    ]
+    articles = []
+    for feed_url, source_name in feeds:
+        try:
+            response = requests.get(feed_url, timeout=10)
+            root = ET.fromstring(response.content)
+            for item in root.findall(".//item")[:5]:
+                title = item.findtext("title", "")
+                link = item.findtext("link", "")
+                description = item.findtext("description", "") or title
+                if title and link:
+                    articles.append({
+                        "title": title,
+                        "description": description[:200],
+                        "url": link,
+                        "source": {"name": source_name},
+                    })
+        except Exception as e:
+            print("  Feed error: " + str(e))
+    return articles
+
+
+def fetch_crypto_prices():
+    url = "https://api.coingecko.com/api/v3/simple/price"
     params = {
-        "q": "crypto OR bitcoin OR ethereum OR gold OR silver OR stocks OR forex OR nasdaq OR dow jones OR S&P 500 OR commodities OR investing",
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": 10,
-        "apiKey": NEWS_API_KEY,
+        "ids": "bitcoin,ethereum,solana,dogecoin,ripple,cardano",
+        "vs_currencies": "usd",
+        "include_24hr_change": "true",
     }
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
-    return response.json().get("articles", [])
+    data = response.json()
+    lines = ["📊 Crypto Prices Update"]
+    names = {
+        "bitcoin": "Bitcoin BTC",
+        "ethereum": "Ethereum ETH",
+        "solana": "Solana SOL",
+        "dogecoin": "Dogecoin DOGE",
+        "ripple": "XRP",
+        "cardano": "Cardano ADA",
+    }
+    for coin, label in names.items():
+        price = data[coin]["usd"]
+        change = data[coin]["usd_24h_change"]
+        arrow = "🟢" if change >= 0 else "🔴"
+        lines.append(arrow + " " + label + ": $" + "{:,.2f}".format(price) + " (" + "{:+.2f}".format(change) + "%)")
+    return "\n".join(lines)
 
 
 def rewrite_with_groq(title, description, source, url):
     prompt = (
-       "You write posts for a crypto Telegram channel.\n"
-"Your tone is very casual, short and punchy — like a friend texting you hot news.\n"
-"Max 3-4 sentences. Use 1-2 emojis. No formal language.\n\n"
-        f"Article title: {title}\n"
-        f"Summary: {description}\n"
-        f"Source: {source}\n"
-        f"Link: {url}\n\n"
+        "You write posts for a crypto & finance Telegram channel.\n"
+        "Your tone is very casual, short and punchy - like a friend texting you hot news.\n"
+        "Max 3-4 sentences. Use 1-2 emojis. No formal language. End with the link.\n\n"
+        "Article title: " + title + "\n"
+        "Summary: " + description + "\n"
+        "Source: " + source + "\n"
+        "Link: " + url + "\n\n"
         "Write the Telegram post now. No preamble, just the post itself."
     )
 
@@ -77,7 +117,6 @@ def post_to_telegram(message):
     payload = {
         "chat_id": TELEGRAM_CHANNEL,
         "text": message,
-        "parse_mode": "HTML",
         "disable_web_page_preview": False,
     }
     response = requests.post(url, json=payload, timeout=10)
@@ -90,9 +129,20 @@ def run():
     print("Checking for news every " + str(CHECK_INTERVAL_MINUTES) + " minutes...\n")
 
     posted_ids = load_posted_ids()
+    last_price_post = 0
 
     while True:
         try:
+            # Post price update every hour
+            if time.time() - last_price_post > 3600:
+                try:
+                    prices = fetch_crypto_prices()
+                    post_to_telegram(prices)
+                    print("  Posted price update!")
+                    last_price_post = time.time()
+                except Exception as e:
+                    print("  Price fetch error: " + str(e))
+
             print("[" + time.strftime("%H:%M:%S") + "] Fetching latest crypto news...")
             articles = fetch_crypto_news()
             new_count = 0
